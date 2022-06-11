@@ -10,7 +10,7 @@ set_version("1.6.8", {build = "%Y%m%d%H%M"})
 -- set warning all as error
 set_warnings("all", "error")
 
-set_policy("preprocessor.linemarkers", false)
+--set_policy("preprocessor.linemarkers", false)
 
 -- set language: c99
 stdc = "c99"
