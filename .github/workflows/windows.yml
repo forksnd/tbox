@@ -21,7 +21,7 @@ jobs:
 
       - name: Tests
         run: |
-          git clone git@github.com:xmake-io/xmake.git -b test xmakesrc
+          git clone https://github.com/xmake-io/xmake.git -b test xmakesrc
           $Env:XMAKE_PROGRAM_DIR = $(Resolve-Path ./xmakesrc/xmake)
           xmake --version
           xmake f -a ${{ matrix.arch }}
