@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Copyright (C) 2022-present, TBOOX Open Source Group.
+# Copyright (C) 2022-present, Xmake Open Source Community.
 #
 # @author      ruki
 # @homepage    https://github.com/xmake-io/xmake.sh
@@ -27,7 +27,7 @@ xmake_sh_builddir="build"
 xmake_sh_version="1.0.5"
 xmake_sh_verbose=false
 xmake_sh_diagnosis=false
-xmake_sh_copyright="Copyright (C) 2022-present Ruki Wang, tboox.org, xmake.io."
+xmake_sh_copyright="Copyright (C) 2022-present Ruki Wang, https://xmake.io."
 xmake_sh_makefile="${xmake_sh_projectdir}/Makefile"
 
 #-----------------------------------------------------------------------------
@@ -243,9 +243,9 @@ _os_find() {
     local name="${2}"
     local depth="${3}"
     if test_nz "${depth}"; then
-        _ret=$(find "${dir}" -maxdepth "${depth}" -mindepth "${depth}" -type f -name "${name}")
+        _ret=$(find "${dir}" -maxdepth "${depth}" -mindepth "${depth}" -type f -name "${name}" | LC_ALL=C sort)
     else
-        _ret=$(find "${dir}" -type f -name "${name}")
+        _ret=$(find "${dir}" -type f -name "${name}" | LC_ALL=C sort)
     fi
 }
 
@@ -2813,8 +2813,8 @@ _show_version() {
     echo "    /_/\_\_|_|  |_|\__ \|_|\_\____(_)___/_| |_|       "
     echo '                                     by ruki, xmake.io'
     echo '                                                      '
-    echo '   👉  Manual: https://xmake.io/#/getting_started     '
-    echo '   🙏  Donate: https://xmake.io/#/sponsor             '
+    echo '   👉  Manual: https://xmake.io/guide/quick-start     '
+    echo '   🙏  Donate: https://xmake.io/about/sponsor         '
     echo '                                                      '
     exit 2
 }
