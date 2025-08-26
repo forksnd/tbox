@@ -144,7 +144,9 @@ static tb_bool_t tb_process_kill_allchilds(pid_t parent_pid)
 {
     tb_assert_and_check_return_val(parent_pid > 0, tb_false);
 
-    tb_int_t procs_count = proc_listpids(PROC_PPID_ONLY, parent_pid, tb_null, 0);
+    tb_int_t procs_count = 0;
+#ifdef PROC_PPID_ONLY
+    procs_count = proc_listpids(PROC_PPID_ONLY, parent_pid, tb_null, 0);
     tb_assert_and_check_return_val(procs_count >= 0, tb_false);
 
     if (procs_count > 0)
@@ -156,7 +158,6 @@ static tb_bool_t tb_process_kill_allchilds(pid_t parent_pid)
         for (tb_int_t i = 0; i < procs_count; ++i)
         {
             tb_check_continue(pids[i]);
-
 #ifdef __tb_debug__
             tb_char_t path[PROC_PIDPATHINFO_MAXSIZE] = {0};
             proc_pidpath(pids[i], path, sizeof(path));
@@ -165,13 +166,41 @@ static tb_bool_t tb_process_kill_allchilds(pid_t parent_pid)
                 tb_trace_d("kill pid: %d, path: %s", pids[i], path);
             }
 #endif
-
             // kill subprocess
             kill(pids[i], SIGKILL);
         }
 
         tb_free(pids);
     }
+#else
+    procs_count = proc_listpids(PROC_ALL_PIDS, 0, tb_null, 0);
+    tb_assert_and_check_return_val(procs_count >= 0, tb_false);
+
+    if (procs_count > 0) {
+        pid_t* pids = tb_nalloc0_type(procs_count, pid_t);
+        tb_assert_and_check_return_val(pids, tb_false);
+
+        proc_listpids(PROC_ALL_PIDS, 0, pids, procs_count * sizeof(pid_t));
+        for (tb_int_t i = 0; i < procs_count; i++) {
+            pid_t pid = pids[i];
+            if (pid <= 0 || pid == parent_pid) continue;
+
+            struct proc_bsdinfo info;
+            if (proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, sizeof(info)) == sizeof(info)) {
+                if (info.pbi_ppid == parent_pid) {
+#ifdef __tb_debug__
+                    tb_char_t path[PROC_PIDPATHINFO_MAXSIZE] = {0};
+                    proc_pidpath(pid, path, sizeof(path));
+                    if (tb_strlen(path) > 0)
+                        tb_trace_d("kill pid: %d, path: %s", pid, path);
+#endif
+                    kill(pid, SIGKILL);
+                }
+            }
+        }
+        tb_free(pids);
+    }
+#endif
     return tb_true;
 }
 #elif defined(TB_CONFIG_OS_LINUX)
