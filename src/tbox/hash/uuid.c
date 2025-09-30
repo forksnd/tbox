@@ -132,15 +132,65 @@ tb_char_t const* tb_uuid4_make_cstr(tb_char_t uuid_cstr[37], tb_char_t const* na
     if (!tb_uuid4_make(uuid, name)) return tb_null;
 
     // make uuid string
-    tb_long_t size = tb_snprintf(   uuid_cstr
-                                ,   37
-                                ,   "%02X%02X%02X%02X-%02X%02X-%02X%02X-%02X%02X-%02X%02X%02X%02X%02X%02X"
-                                ,   uuid[0], uuid[1], uuid[2], uuid[3]
-                                ,   uuid[4], uuid[5]
-                                ,   uuid[6], uuid[7]
-                                ,   uuid[8], uuid[9]
-                                ,   uuid[10], uuid[11], uuid[12], uuid[13], uuid[14], uuid[15]);
-    tb_assert_and_check_return_val(size == 36, tb_null);
-    uuid_cstr[36] = '\0';
+    static tb_char_t const* digits_table = "0123456789ABCDEF";
+    tb_char_t* s = uuid_cstr;
+
+    s[0] = digits_table[(uuid[0] >> 4) & 15];
+    s[1] = digits_table[uuid[0] & 15];
+
+    s[2] = digits_table[(uuid[1] >> 4) & 15];
+    s[3] = digits_table[uuid[1] & 15];
+
+    s[4] = digits_table[(uuid[2] >> 4) & 15];
+    s[5] = digits_table[uuid[2] & 15];
+
+    s[6] = digits_table[(uuid[3] >> 4) & 15];
+    s[7] = digits_table[uuid[3] & 15];
+
+    s[8] = '-';
+
+    s[9] = digits_table[(uuid[4] >> 4) & 15];
+    s[10] = digits_table[uuid[4] & 15];
+
+    s[11] = digits_table[(uuid[5] >> 4) & 15];
+    s[12] = digits_table[uuid[5] & 15];
+
+    s[13] = '-';
+
+    s[14] = digits_table[(uuid[6] >> 4) & 15];
+    s[15] = digits_table[uuid[6] & 15];
+
+    s[16] = digits_table[(uuid[7] >> 4) & 15];
+    s[17] = digits_table[uuid[7] & 15];
+
+    s[18] = '-';
+
+    s[19] = digits_table[(uuid[8] >> 4) & 15];
+    s[20] = digits_table[uuid[8] & 15];
+
+    s[21] = digits_table[(uuid[9] >> 4) & 15];
+    s[22] = digits_table[uuid[9] & 15];
+
+    s[23] = '-';
+
+    s[24] = digits_table[(uuid[10] >> 4) & 15];
+    s[25] = digits_table[uuid[10] & 15];
+
+    s[26] = digits_table[(uuid[11] >> 4) & 15];
+    s[27] = digits_table[uuid[11] & 15];
+
+    s[28] = digits_table[(uuid[12] >> 4) & 15];
+    s[29] = digits_table[uuid[12] & 15];
+
+    s[30] = digits_table[(uuid[13] >> 4) & 15];
+    s[31] = digits_table[uuid[13] & 15];
+
+    s[32] = digits_table[(uuid[14] >> 4) & 15];
+    s[33] = digits_table[uuid[14] & 15];
+
+    s[34] = digits_table[(uuid[15] >> 4) & 15];
+    s[35] = digits_table[uuid[15] & 15];
+
+    s[36] = '\0';
     return uuid_cstr;
 }
