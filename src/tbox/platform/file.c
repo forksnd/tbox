@@ -60,7 +60,7 @@ tb_bool_t tb_file_is_same(tb_char_t const* srcpath, tb_char_t const* dstpath)
 
         while (srcread < srcsize)
         {
-            tb_size_t need = tb_min(sizeof(srcdata), srcsize - srcread);
+            tb_size_t need = tb_min(sizeof(srcdata), (tb_size_t)(srcsize - srcread));
             tb_long_t srcreal = tb_file_read(srcfile, srcdata, need);
             tb_long_t dstreal = tb_file_read(dstfile, dstdata, need);
             tb_check_break(srcreal > 0 && dstreal > 0 && srcreal == dstreal);
