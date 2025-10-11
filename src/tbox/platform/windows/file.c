@@ -453,6 +453,10 @@ tb_bool_t tb_file_copy(tb_char_t const* path, tb_char_t const* dest, tb_size_t f
         return ok;
     }
 
+    // do not copy if file contents are same
+    if (flags & TB_FILE_COPY_IF_DIFFERENT && tb_file_is_same(path, dest))
+        return tb_true;
+
     // copy it
     if (!CopyFileW(full0, full1, FALSE))
     {
