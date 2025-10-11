@@ -36,7 +36,7 @@
  * private implementation
  */
 // compare file contents, return false if their contents are different
-static tb_bool_t tb_file_is_same(tb_char_t const* srcpath, tb_char_t const* dstpath)
+tb_bool_t tb_file_is_same(tb_char_t const* srcpath, tb_char_t const* dstpath)
 {
     tb_bool_t ok = tb_false;
     tb_file_ref_t srcfile = tb_null;
@@ -180,10 +180,6 @@ tb_bool_t tb_file_info(tb_char_t const* path, tb_file_info_t* info)
 }
 tb_bool_t tb_file_copy(tb_char_t const* path, tb_char_t const* dest, tb_size_t flags)
 {
-    // suppress warning: -Wunused-function
-    if (flags & TB_FILE_COPY_IF_DIFFERENT && tb_file_is_same(path, dest))
-        return tb_true;
-
     tb_trace_noimpl();
     return tb_false;
 }
