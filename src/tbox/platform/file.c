@@ -55,8 +55,8 @@ static tb_bool_t tb_file_is_same(tb_char_t const* srcpath, tb_char_t const* dstp
 
         tb_byte_t srcdata[8192];
         tb_byte_t dstdata[8192];
-        tb_size_t srcread = 0;
-        tb_size_t dstread = 0;
+        tb_hize_t srcread = 0;
+        tb_hize_t dstread = 0;
 
         while (srcread < srcsize)
         {
@@ -180,6 +180,10 @@ tb_bool_t tb_file_info(tb_char_t const* path, tb_file_info_t* info)
 }
 tb_bool_t tb_file_copy(tb_char_t const* path, tb_char_t const* dest, tb_size_t flags)
 {
+    // suppress warning: -Wunused-function
+    if (flags & TB_FILE_COPY_IF_DIFFERENT && tb_file_is_same(path, dest))
+        return tb_true;
+
     tb_trace_noimpl();
     return tb_false;
 }
