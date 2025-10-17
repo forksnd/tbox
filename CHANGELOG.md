@@ -2,6 +2,10 @@
 
 ## master (unreleased)
 
+### New features
+
+* Add copy file if be different
+
 ### Bugs fixed
 
 * [#272](https://github.com/tboox/tbox/issues/272): Fix read file stuck on windows arm64
@@ -326,6 +330,10 @@
 # 更新日志
 
 ## master (开发中)
+
+### 新特性
+
+* 添加 copy if be different 支持
 
 ### Bugs 修复
 
