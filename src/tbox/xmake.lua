@@ -19,19 +19,24 @@ target("tbox")
     add_defines("__tb_prefix__=\"tbox\"")
 
     -- set the auto-generated config.h
-    set_configdir("$(buildir)/$(plat)/$(arch)/$(mode)")
+    set_configdir("$(builddir)/$(plat)/$(arch)/$(mode)")
     add_configfiles("tbox.config.h.in")
 
     -- add include directories
     add_includedirs("..", {public = true})
-    add_includedirs("$(buildir)/$(plat)/$(arch)/$(mode)", {public = true})
+    add_includedirs("$(builddir)/$(plat)/$(arch)/$(mode)", {public = true})
 
     -- add the header files for installing
     add_headerfiles("../(tbox/**.h)|**/impl/**.h")
     add_headerfiles("../(tbox/prefix/**/prefix.S)")
     add_headerfiles("../(tbox/math/impl/*.h)")
     add_headerfiles("../(tbox/utils/impl/*.h)")
-    add_headerfiles("$(buildir)/$(plat)/$(arch)/$(mode)/tbox.config.h", {prefixdir = "tbox"})
+    add_headerfiles("$(builddir)/$(plat)/$(arch)/$(mode)/tbox.config.h", {prefixdir = "tbox"})
+
+    -- add frameworks
+    if is_plat("macosx") then
+        add_frameworks("CoreFoundation", "CoreServices", {public = true})
+    end
 
     -- add packages
     for _, name in ipairs({"mbedtls", "polarssl", "openssl", "pcre2", "pcre", "zlib", "mysql", "sqlite3"}) do
@@ -66,7 +71,7 @@ target("tbox")
     add_files("libm/isqrti.c")
     add_files("libm/isqrti64.c")
     add_files("libm/idivi8.c")
-    add_files("platform/*.c|context.c|exception.c", "platform/impl/*.c|charset.c")
+    add_files("platform/*.c|context.c|exception.c", "platform/impl/*.c|charset.c|poller_fwatcher.c")
 
     -- add the source files for the float type
     if has_config("float") then add_files("libm/*.c") end
@@ -80,7 +85,7 @@ target("tbox")
     -- add the source files for the hash module
     if has_config("hash") then
         add_files("hash/*.c")
-        if not is_plat("windows") then
+        if not is_plat("windows") and not has_config("cosmocc") and not is_config("toolchain", "cosmocc") then
             add_files("hash/arch/crc32.S")
         end
     end
@@ -163,4 +168,4 @@ target("tbox")
     end
 
     -- check interfaces
-    check_interfaces()
+    on_config("check_interfaces")

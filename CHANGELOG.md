@@ -2,9 +2,91 @@
 
 ## master (unreleased)
 
+### New features
+
+* Add copy file if be different
+
+### Bugs fixed
+
+* [#272](https://github.com/tboox/tbox/issues/272): Fix read file stuck on windows arm64
+
+## v1.7.7
+
+### New features
+
+* [#269](https://github.com/tboox/tbox/pull/269): Add buffer stream
+
+## v1.7.6
+
+### New features
+
+* Support cosmocc toolchain
+
+### Changes
+
+* Implement copy symlinks on windows
+
+## v1.7.5
+
+### Changes
+
+* Improve to check interfaces
+* Improve process to output same pipes
+
+## v1.7.4
+
+### New features
+
+* Add Haiku support
+* Add tb_file_fscase
+
+### Changes
+
+* Improve wasm support
+* Improve to kill processes
+* Improve xmake.sh
+
+### Bugs fixed
+
+* Fix setenv for msys/mingw
+* Fix compile error for mingw
+* Fix tb_buffer_memsetp
+
+## v1.7.3
+
+### Changes
+
+* Improve support for xp and mingw
+* Improve configure to support debian package better
+
+## v1.7.2
+
+### New features
+
+* [#201](https://github.com/tboox/tbox/pull/201): Add xmake.sh
+
+### Changes
+
+* Improve path for windows, support UNC and dos device path
+
+### Bugs Fixed
+
+* [#199](https://github.com/tboox/tbox/issues/199): Fix tb_strcmp
+
+## v1.7.1
+
+### New features
+
+* [#190](https://github.com/tboox/tbox/pull/190): Add fs watcher
+* Add `tb_file_touch` api
+
 ### Changes
 
 * Support wasm
+* Support arm64 for windows
+* Improve tb_file_info to detect symlink
+* Improve tb_file_copy to support symlink
+* Improve tb_directory_copy to support symlink
 
 ## v1.6.9
 
@@ -249,9 +331,91 @@
 
 ## master (开发中)
 
+### 新特性
+
+* 添加 copy if be different 支持
+
+### Bugs 修复
+
+* [#272](https://github.com/tboox/tbox/issues/272): 修复读取文件卡住问题
+
+## v1.7.7
+
+### 新特性
+
+* [#269](https://github.com/tboox/tbox/pull/269): 添加 buffer 流
+
+## v1.7.6
+
+### 新特性
+
+* 增加对 cosmocc 工具链支持
+
+### 改进
+
+* 改进 copyfile 支持，在 windows 实现对 symlinks 的复制
+
+## v1.7.5
+
+### 改进
+
+* 改进接口检测
+* 改进 windows 进程输出，支持同时输出到同一个管道
+
+## v1.7.4
+
+### 新特性
+
+* 添加 Haiku 支持
+* 添加 tb_file_fscase 接口判断文件大小写敏感
+
+### 改进
+
+* 改进 wasm 支持
+* 改进退出子进程
+* 改进 xmake.sh
+
+### Bugs 修复
+
+* 修复 msys/mingw 下 setenv 设置问题
+* 修复 mingw 编译错误
+* 修复 tb_buffer_memsetp
+
+## v1.7.3
+
+### 改进
+
+* 改进对 xp 和 mingw 的支持
+* 改进 configure 构建脚本，更好的支持 debian 打包
+
+## v1.7.2
+
+### 新特性
+
+* [#201](https://github.com/tboox/tbox/pull/201): 添加 xmake.sh
+
+### 改进
+
+* 改进 windows 下根路径处理，支持 UNC 和 dos 设备路径格式
+
+### Bugs 修复
+
+* [#199](https://github.com/tboox/tbox/issues/199): 修复 tb_strcmp
+
+## v1.7.1
+
+### 新特性
+
+* [#190](https://github.com/tboox/tbox/pull/190): 添加文件系统状态监视器
+* 添加 `tb_file_touch` 接口
+
 ### 改进
 
 * 支持 wasm
+* 支持 arm64 windows
+* 改进 tb_file_info，支持判断符号链接
+* 改进 tb_file_copy 支持符号链接
+* 改进 tb_directory_copy 支持符号链接
 
 ## v1.6.9
 

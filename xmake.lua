@@ -2,10 +2,10 @@
 set_project("tbox")
 
 -- set xmake minimum version
-set_xmakever("2.5.1")
+set_xmakever("2.8.2")
 
 -- set project version
-set_version("1.6.8", {build = "%Y%m%d%H%M"})
+set_version("1.7.8", {build = "%Y%m%d", soname = true})
 
 -- set warning all as error
 set_warnings("all", "error")
@@ -18,12 +18,32 @@ set_languages(stdc)
 set_configvar("_GNU_SOURCE", 1)
 set_configvar("_REENTRANT", 1)
 
+-- add module directories
+add_moduledirs("xmake")
+
 -- disable some compiler errors
-add_cxflags("-Wno-error=deprecated-declarations", "-fno-strict-aliasing", "-Wno-error=expansion-to-defined")
-add_mxflags("-Wno-error=deprecated-declarations", "-fno-strict-aliasing", "-Wno-error=expansion-to-defined")
+add_cxflags("-Wno-error=deprecated-declarations", "-fno-strict-aliasing", "-Wno-error=expansion-to-defined", "-Wno-error=empty-body")
+add_mxflags("-Wno-error=deprecated-declarations", "-fno-strict-aliasing", "-Wno-error=expansion-to-defined", "-Wno-error=empty-body")
+if has_config("coroutine") then
+    -- https://github.com/tboox/tbox/issues/218
+    add_cxflags("gcc::-Wno-error=dangling-pointer")
+end
+
+-- set wasm toolchain
+if is_plat("wasm") then
+    add_requires("emscripten")
+    set_toolchains("emcc@emscripten")
+end
+
+-- set cosmocc toolchain, e.g. xmake f -p linux --cosmocc=y
+if has_config("cosmocc") then
+    add_requires("cosmocc")
+    set_toolchains("@cosmocc")
+    set_policy("build.ccache", false)
+end
 
 -- add build modes
-add_rules("mode.release", "mode.debug", "mode.profile", "mode.coverage")-- TODO, "mode.valgrind", "mode.asan", "mode.tsan", "mode.ubsan") -- for xmake v2.3.3
+add_rules("mode.release", "mode.debug", "mode.profile", "mode.coverage", "mode.valgrind", "mode.asan", "mode.tsan", "mode.ubsan")
 if is_mode("debug") then
     add_defines("__tb_debug__")
 end
@@ -46,7 +66,13 @@ if has_config("small", "micro") then
         -- TODO we should fix it in context code later
         -- https://github.com/tboox/tbox/issues/175
         not has_config("coroutine") then
-        set_optimize("smallest")
+        if is_plat("windows") then
+            -- we cannot use smallest(/O1), it maybe generates incorrect code for msvc2022
+            -- @see https://github.com/tboox/tbox/issues/272
+            set_optimize("fastest")
+        else
+            set_optimize("smallest")
+        end
     end
     add_cxflags("-fno-stack-protector")
 end
@@ -60,11 +86,13 @@ if is_plat("windows") then
     else
         set_runtimes("MT")
     end
-    add_syslinks("ws2_32")
+    add_syslinks("ws2_32", "user32")
 elseif is_plat("android") then
     add_syslinks("m", "c")
 elseif is_plat("mingw", "msys", "cygwin") then
-    add_syslinks("ws2_32", "pthread", "m")
+    add_syslinks("ws2_32", "user32", "pthread", "m")
+elseif is_plat("haiku") then
+    add_syslinks("pthread", "network", "m", "c")
 else
     add_syslinks("pthread", "dl", "m", "c")
 end

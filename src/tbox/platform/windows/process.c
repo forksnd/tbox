@@ -22,6 +22,11 @@
 /* //////////////////////////////////////////////////////////////////////////////////////
  * includes
  */
+#if defined(__MINGW32__) || defined(__MINGW64__)
+// enable UpdateProcThreadAttribute
+#   undef _WIN32_WINNT
+#   define _WIN32_WINNT 0x0600
+#endif
 #include "prefix.h"
 #include "../path.h"
 #include "../file.h"
@@ -43,10 +48,15 @@
 typedef struct __tb_process_t
 {
     // the startup info
-    STARTUPINFO             si;
+    STARTUPINFOEX           si;
+    STARTUPINFO*            psi;
 
     // the process info
     PROCESS_INFORMATION     pi;
+
+    // the file handles
+    HANDLE                  file_handles[3];
+    DWORD                   file_handles_count;
 
     // the stdin redirect type
     tb_uint16_t             intype;
@@ -109,20 +119,22 @@ tb_void_t tb_process_handle_close(tb_process_ref_t self)
         CloseHandle(process->pi.hProcess);
     process->pi.hProcess = INVALID_HANDLE_VALUE;
 
-    // exit stdin file
-    if (process->intype == TB_PROCESS_REDIRECT_TYPE_FILEPATH && process->si.hStdInput && process->si.hStdInput != INVALID_HANDLE_VALUE)
-        tb_file_exit((tb_file_ref_t)process->si.hStdInput);
-    process->si.hStdInput = INVALID_HANDLE_VALUE;
+    // exit file handles
+    for (tb_size_t i = 0; i < process->file_handles_count; i++)
+    {
+        HANDLE handle = process->file_handles[i];
+        if (handle && handle != INVALID_HANDLE_VALUE)
+        {
+            tb_file_exit((tb_file_ref_t)handle);
+            process->file_handles[i] = INVALID_HANDLE_VALUE;
+        }
+    }
+    process->file_handles_count = 0;
 
-    // exit stdout file
-    if (process->outtype == TB_PROCESS_REDIRECT_TYPE_FILEPATH && process->si.hStdOutput && process->si.hStdOutput != INVALID_HANDLE_VALUE)
-        tb_file_exit((tb_file_ref_t)process->si.hStdOutput);
-    process->si.hStdOutput = INVALID_HANDLE_VALUE;
-
-    // exit stderr file
-    if (process->errtype == TB_PROCESS_REDIRECT_TYPE_FILEPATH && process->si.hStdError && process->si.hStdError != INVALID_HANDLE_VALUE)
-        tb_file_exit((tb_file_ref_t)process->si.hStdError);
-    process->si.hStdError = INVALID_HANDLE_VALUE;
+    // reset std handles
+    process->psi->hStdInput = INVALID_HANDLE_VALUE;
+    process->psi->hStdOutput = INVALID_HANDLE_VALUE;
+    process->psi->hStdError = INVALID_HANDLE_VALUE;
 }
 tb_bool_t tb_process_group_init()
 {
@@ -147,30 +159,85 @@ tb_void_t tb_process_group_exit()
     if (g_process_group)
         tb_kernel32()->TerminateJobObject(g_process_group, 0);
 }
+/*
+ * e.g.
+ * "C:\Program Files\app.exe"  -> "\"C:\\Program Files\\app.exe\""
+ * "path\to\file"              -> "path\to\file"
+ * "path with spaces"          -> "\"path with spaces\""
+ * "test\"quote"               -> "\"test\\\"quote\""
+ * "ends with backslash\"      -> "\"ends with backslash\\\\\""
+ *
+ * @see https://github.com/xmake-io/xmake/issues/6979
+ */
 static tb_void_t tb_process_args_append(tb_string_ref_t result, tb_char_t const* cstr)
 {
-    // need wrap quote?
+    // check if we need to wrap with quotes
+    // according to Windows command line argument rules
     tb_char_t ch;
     tb_char_t const* p = cstr;
     tb_bool_t wrap_quote = tb_false;
+    tb_bool_t empty = tb_true;
+
     while ((ch = *p))
     {
-        if (ch == ' ' || ch == '(' || ch == ')') wrap_quote = tb_true;
+        empty = tb_false;
+        // wrap if contains: space, tab, double quote, or empty string
+        if (ch == ' ' || ch == '\t' || ch == '\"')
+        {
+            wrap_quote = tb_true;
+            break;
+        }
         p++;
     }
+
+    // empty string also needs quotes
+    if (empty) wrap_quote = tb_true;
 
     // wrap begin quote
     if (wrap_quote) tb_string_chrcat(result, '\"');
 
-    // escape characters
+    // escape characters according to Windows rules:
+    // 1. Backslashes are interpreted literally, unless they immediately precede a double quote
+    // 2. A double quote preceded by a backslash is interpreted as a literal double quote
+    // 3. Backslashes are interpreted literally, unless they immediately precede a double quote
+    // 4. When followed by a double quote, backslashes must be doubled
     p = cstr;
     while ((ch = *p))
     {
-        // escape '"' or '\\'
-        if (ch == '\"' || (wrap_quote && ch == '\\'))
+        tb_size_t backslash_count = 0;
+
+        // count consecutive backslashes
+        while (ch == '\\')
+        {
+            backslash_count++;
+            p++;
+            ch = *p;
+        }
+
+        if (ch == '\"')
+        {
+            // backslashes before quote need to be doubled, plus escape the quote
+            for (tb_size_t i = 0; i < backslash_count * 2; i++)
+                tb_string_chrcat(result, '\\');
             tb_string_chrcat(result, '\\');
-        tb_string_chrcat(result, ch);
-        p++;
+            tb_string_chrcat(result, '\"');
+            p++;
+        }
+        else if (ch == '\0')
+        {
+            // backslashes at the end need to be doubled if we're wrapping with quotes
+            for (tb_size_t i = 0; i < (wrap_quote ? backslash_count * 2 : backslash_count); i++)
+                tb_string_chrcat(result, '\\');
+            break;
+        }
+        else
+        {
+            // normal backslashes don't need escaping
+            for (tb_size_t i = 0; i < backslash_count; i++)
+                tb_string_chrcat(result, '\\');
+            tb_string_chrcat(result, ch);
+            p++;
+        }
     }
 
     // wrap end quote
@@ -228,6 +295,8 @@ tb_process_ref_t tb_process_init_cmd(tb_char_t const* cmd, tb_process_attr_ref_t
     tb_wchar_t*     environment = tb_null;
     tb_bool_t       userenv     = tb_false;
     tb_wchar_t*     command     = tb_null;
+    LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList = tb_null;
+    tb_bool_t                    lpAttributeListInited = tb_false;
     do
     {
         // make process
@@ -235,7 +304,8 @@ tb_process_ref_t tb_process_init_cmd(tb_char_t const* cmd, tb_process_attr_ref_t
         tb_assert_and_check_break(process);
 
         // init startup info
-        process->si.cb = sizeof(process->si);
+        process->psi = &process->si.StartupInfo;
+        process->psi->cb = sizeof(process->si);
 
         // save the user private data
         if (attr) process->priv = attr->priv;
@@ -244,7 +314,9 @@ tb_process_ref_t tb_process_init_cmd(tb_char_t const* cmd, tb_process_attr_ref_t
         tb_bool_t detach = attr && (attr->flags & TB_PROCESS_FLAG_DETACH);
 
         // init flags
+        // see: https://learn.microsoft.com/en-us/windows/win32/procthread/process-creation-flags
         DWORD flags = CREATE_UNICODE_ENVIRONMENT;
+        if (attr && attr->flags & TB_PROCESS_FLAG_NO_WINDOW) flags |= CREATE_NO_WINDOW;
         if (attr && attr->flags & TB_PROCESS_FLAG_SUSPEND) flags |= CREATE_SUSPENDED;
         if (!detach) flags |= CREATE_BREAKAWAY_FROM_JOB; // create process with parent process group by default, need set JOB_OBJECT_LIMIT_BREAKAWAY_OK limit for job
 
@@ -325,7 +397,8 @@ tb_process_ref_t tb_process_init_cmd(tb_char_t const* cmd, tb_process_attr_ref_t
         }
 
         // redirect
-        BOOL bInheritHandle = FALSE;
+        HANDLE handlesToInherit[3];
+        DWORD  handlesToInheritCount = 0;
         if (attr)
         {
             // redirect from stdin
@@ -338,27 +411,26 @@ tb_process_ref_t tb_process_init_cmd(tb_char_t const* cmd, tb_process_attr_ref_t
                 // no mode? uses the default mode
                 if (!inmode) inmode = TB_FILE_MODE_RO;
 
-                // enable handles
-                process->si.dwFlags |= STARTF_USESTDHANDLES;
-
                 // open file
-                process->si.hStdInput = (HANDLE)tb_file_init(attr->in.path, inmode);
-                tb_assertf_pass_and_check_break(process->si.hStdInput, "cannot redirect stdin to file: %s", attr->in.path);
+                HANDLE hStdInput = (HANDLE)tb_file_init(attr->in.path, inmode);
+                tb_assertf_pass_and_check_break(hStdInput, "cannot redirect stdin to file: %s", attr->in.path);
 
                 // enable inherit
-                tb_kernel32()->SetHandleInformation(process->si.hStdInput, HANDLE_FLAG_INHERIT, TRUE);
-                bInheritHandle = TRUE;
+                tb_kernel32()->SetHandleInformation(hStdInput, HANDLE_FLAG_INHERIT, TRUE);
+                handlesToInherit[handlesToInheritCount++] = hStdInput;
+                process->file_handles[process->file_handles_count++] = hStdInput;
+                process->psi->hStdInput = hStdInput;
             }
             else if ((attr->intype == TB_PROCESS_REDIRECT_TYPE_PIPE && attr->in.pipe) ||
                      (attr->intype == TB_PROCESS_REDIRECT_TYPE_FILE && attr->in.file))
             {
                 // enable handles
-                process->si.dwFlags |= STARTF_USESTDHANDLES;
-                process->si.hStdInput = attr->intype == TB_PROCESS_REDIRECT_TYPE_PIPE? tb_pipe_file_handle(attr->in.pipe) : (HANDLE)attr->in.file;
+                HANDLE hStdInput = attr->intype == TB_PROCESS_REDIRECT_TYPE_PIPE? tb_pipe_file_handle(attr->in.pipe) : (HANDLE)attr->in.file;
 
                 // enable inherit
-                tb_kernel32()->SetHandleInformation(process->si.hStdInput, HANDLE_FLAG_INHERIT, TRUE);
-                bInheritHandle = TRUE;
+                tb_kernel32()->SetHandleInformation(hStdInput, HANDLE_FLAG_INHERIT, TRUE);
+                handlesToInherit[handlesToInheritCount++] = hStdInput;
+                process->psi->hStdInput = hStdInput;
             }
 
             // redirect to stdout
@@ -371,27 +443,26 @@ tb_process_ref_t tb_process_init_cmd(tb_char_t const* cmd, tb_process_attr_ref_t
                 // no mode? uses the default mode
                 if (!outmode) outmode = TB_FILE_MODE_RW | TB_FILE_MODE_CREAT | TB_FILE_MODE_TRUNC;
 
-                // enable handles
-                process->si.dwFlags |= STARTF_USESTDHANDLES;
-
                 // open file
-                process->si.hStdOutput = (HANDLE)tb_file_init(attr->out.path, outmode);
-                tb_assertf_pass_and_check_break(process->si.hStdOutput, "cannot redirect stdout to file: %s", attr->out.path);
+                HANDLE hStdOutput = (HANDLE)tb_file_init(attr->out.path, outmode);
+                tb_assertf_pass_and_check_break(hStdOutput, "cannot redirect stdout to file: %s", attr->out.path);
 
                 // enable inherit
-                tb_kernel32()->SetHandleInformation(process->si.hStdOutput, HANDLE_FLAG_INHERIT, TRUE);
-                bInheritHandle = TRUE;
+                tb_kernel32()->SetHandleInformation(hStdOutput, HANDLE_FLAG_INHERIT, TRUE);
+                handlesToInherit[handlesToInheritCount++] = hStdOutput;
+                process->file_handles[process->file_handles_count++] = hStdOutput;
+                process->psi->hStdOutput = hStdOutput;
             }
             else if ((attr->outtype == TB_PROCESS_REDIRECT_TYPE_PIPE && attr->out.pipe) ||
                      (attr->outtype == TB_PROCESS_REDIRECT_TYPE_FILE && attr->out.file))
             {
                 // enable handles
-                process->si.dwFlags |= STARTF_USESTDHANDLES;
-                process->si.hStdOutput = attr->outtype == TB_PROCESS_REDIRECT_TYPE_PIPE? tb_pipe_file_handle(attr->out.pipe) : (HANDLE)attr->out.file;
+                HANDLE hStdOutput = attr->outtype == TB_PROCESS_REDIRECT_TYPE_PIPE? tb_pipe_file_handle(attr->out.pipe) : (HANDLE)attr->out.file;
 
                 // enable inherit
-                tb_kernel32()->SetHandleInformation(process->si.hStdOutput, HANDLE_FLAG_INHERIT, TRUE);
-                bInheritHandle = TRUE;
+                tb_kernel32()->SetHandleInformation(hStdOutput, HANDLE_FLAG_INHERIT, TRUE);
+                handlesToInherit[handlesToInheritCount++] = hStdOutput;
+                process->psi->hStdOutput = hStdOutput;
             }
 
             // redirect to stderr
@@ -404,37 +475,73 @@ tb_process_ref_t tb_process_init_cmd(tb_char_t const* cmd, tb_process_attr_ref_t
                 // no mode? uses the default mode
                 if (!errmode) errmode = TB_FILE_MODE_RW | TB_FILE_MODE_CREAT | TB_FILE_MODE_TRUNC;
 
-                // enable handles
-                process->si.dwFlags |= STARTF_USESTDHANDLES;
-
                 // open file
-                process->si.hStdError = (HANDLE)tb_file_init(attr->err.path, errmode);
-                tb_assertf_pass_and_check_break(process->si.hStdError, "cannot redirect stderr to file: %s", attr->err.path);
+                HANDLE hStdError = (HANDLE)tb_file_init(attr->err.path, errmode);
+                tb_assertf_pass_and_check_break(hStdError, "cannot redirect stderr to file: %s", attr->err.path);
 
                 // enable inherit
-                tb_kernel32()->SetHandleInformation(process->si.hStdError, HANDLE_FLAG_INHERIT, TRUE);
-                bInheritHandle = TRUE;
+                tb_kernel32()->SetHandleInformation(hStdError, HANDLE_FLAG_INHERIT, TRUE);
+                handlesToInherit[handlesToInheritCount++] = hStdError;
+                process->file_handles[process->file_handles_count++] = hStdError;
+                process->psi->hStdError = hStdError;
             }
             else if ((attr->errtype == TB_PROCESS_REDIRECT_TYPE_PIPE && attr->err.pipe) ||
                      (attr->errtype == TB_PROCESS_REDIRECT_TYPE_FILE && attr->err.file))
             {
                 // enable handles
-                process->si.dwFlags |= STARTF_USESTDHANDLES;
-                process->si.hStdError = attr->errtype == TB_PROCESS_REDIRECT_TYPE_PIPE? tb_pipe_file_handle(attr->err.pipe) : (HANDLE)attr->err.file;
+                HANDLE hStdError = attr->errtype == TB_PROCESS_REDIRECT_TYPE_PIPE? tb_pipe_file_handle(attr->err.pipe) : (HANDLE)attr->err.file;
+
+                // we need duplicate it if output to stdout/stderr pipes in same time
+                if (attr->outtype == TB_PROCESS_REDIRECT_TYPE_PIPE && attr->out.pipe &&
+                    attr->errtype == TB_PROCESS_REDIRECT_TYPE_PIPE && attr->err.pipe &&
+                    attr->out.pipe == attr->err.pipe)
+                {
+                    HANDLE hStdOutput = hStdError;
+                    if (!DuplicateHandle(GetCurrentProcess(), hStdOutput, GetCurrentProcess(), &hStdError, 0, TRUE, DUPLICATE_SAME_ACCESS))
+                        break;
+                    process->file_handles[process->file_handles_count++] = hStdError;
+                }
 
                 // enable inherit
-                tb_kernel32()->SetHandleInformation(process->si.hStdError, HANDLE_FLAG_INHERIT, TRUE);
-                bInheritHandle = TRUE;
+                tb_kernel32()->SetHandleInformation(hStdError, HANDLE_FLAG_INHERIT, TRUE);
+                handlesToInherit[handlesToInheritCount++] = hStdError;
+                process->psi->hStdError = hStdError;
             }
         }
 
-        // init default std handles
-        if (process->si.dwFlags & STARTF_USESTDHANDLES)
+        /* we just inherit the given handles
+         *
+         * @see https://github.com/xmake-io/xmake/issues/2902#issuecomment-1326934902
+         */
+        BOOL bInheritHandle = handlesToInheritCount > 0;
+        if (bInheritHandle && tb_kernel32()->InitializeProcThreadAttributeList)
         {
-            if (!process->si.hStdInput) process->si.hStdInput   = GetStdHandle(STD_INPUT_HANDLE);
-            if (!process->si.hStdOutput) process->si.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
-            if (!process->si.hStdError) process->si.hStdError   = GetStdHandle(STD_ERROR_HANDLE);
+            SIZE_T attributeListSize = 0;
+            if (tb_kernel32()->InitializeProcThreadAttributeList(tb_null, 1, 0, &attributeListSize) ||
+                GetLastError() == ERROR_INSUFFICIENT_BUFFER)
+            {
+                lpAttributeList = (LPPROC_THREAD_ATTRIBUTE_LIST)tb_malloc(attributeListSize);
+                if (lpAttributeList && tb_kernel32()->InitializeProcThreadAttributeList(lpAttributeList, 1, 0, &attributeListSize))
+                {
+                    lpAttributeListInited = tb_true;
+                    if (tb_kernel32()->UpdateProcThreadAttribute(lpAttributeList, 0,
+                            PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+                            handlesToInherit,
+                            handlesToInheritCount * sizeof(HANDLE), tb_null, tb_null))
+                    {
+                        process->si.lpAttributeList = lpAttributeList;
+                        flags |= EXTENDED_STARTUPINFO_PRESENT;
+                    }
+                }
+            }
         }
+
+        /* we just use the default std handles if lpAttributeList is not supported
+         *
+         * @see https://github.com/xmake-io/xmake/issues/3138#issuecomment-1338970250
+         */
+        if (bInheritHandle)
+            process->psi->dwFlags |= STARTF_USESTDHANDLES;
 
         // init process security attributes
         SECURITY_ATTRIBUTES sap     = {0};
@@ -449,7 +556,16 @@ tb_process_ref_t tb_process_init_cmd(tb_char_t const* cmd, tb_process_attr_ref_t
         sat.bInheritHandle          = bInheritHandle;
 
         // create process
-        if (!tb_kernel32()->CreateProcessW(tb_null, command, &sap, &sat, bInheritHandle, flags, (LPVOID)environment, attr && attr->curdir? curdir : tb_null, &process->si, &process->pi))
+        if (!tb_kernel32()->CreateProcessW(tb_null,
+                command,
+                &sap,
+                &sat,
+                bInheritHandle,
+                flags,
+                (LPVOID)environment,
+                attr && attr->curdir? curdir : tb_null,
+                process->psi,
+                &process->pi))
         {
             /* It maybe fails because inside some sessions all user processes belong to a system-created job object named like
              * "\Sessions\x\BaseNamedObjects\Winlogon Job x-xxxxxxxx" (including rdpinit.exe and rdpshell.exe processes),
@@ -460,7 +576,16 @@ tb_process_ref_t tb_process_init_cmd(tb_char_t const* cmd, tb_process_attr_ref_t
             if ((flags & CREATE_BREAKAWAY_FROM_JOB) && GetLastError() == ERROR_ACCESS_DENIED)
             {
                 flags &= ~CREATE_BREAKAWAY_FROM_JOB;
-                if (!tb_kernel32()->CreateProcessW(tb_null, command, &sap, &sat, bInheritHandle, flags, (LPVOID)environment, attr && attr->curdir? curdir : tb_null, &process->si, &process->pi))
+                if (!tb_kernel32()->CreateProcessW(tb_null,
+                        command,
+                        &sap,
+                        &sat,
+                        bInheritHandle,
+                        flags,
+                        (LPVOID)environment,
+                        attr && attr->curdir? curdir : tb_null,
+                        process->psi,
+                        &process->pi))
                     break;
             }
             else break;
@@ -478,6 +603,15 @@ tb_process_ref_t tb_process_init_cmd(tb_char_t const* cmd, tb_process_attr_ref_t
         ok = tb_true;
 
     } while (0);
+
+    // exit attributes list
+    if (lpAttributeList)
+    {
+        if (lpAttributeListInited)
+            tb_kernel32()->DeleteProcThreadAttributeList(lpAttributeList);
+        tb_free(lpAttributeList);
+    }
+    lpAttributeList = tb_null;
 
     // uses the user environment?
     if (userenv)
@@ -712,3 +846,4 @@ tb_long_t tb_process_waitlist(tb_process_ref_t const* processes, tb_process_wait
     // ok?
     return infosize;
 }
+

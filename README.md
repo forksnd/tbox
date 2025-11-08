@@ -1,21 +1,21 @@
 <div align="center">
 
-  <a href="https://docs.tboox.org">
-    <img width="160" heigth="160" src="https://docs.tboox.org/assets/img/logo_text.png">
+  <a href="https://docs.tboox.top">
+    <img width="160" heigth="160" src="https://docs.tboox.top/assets/img/logo_text.png">
   </a>
 
   <div>
     <a href="https://github.com/tboox/tbox/actions?query=workflow%3AWindows">
-      <img src="https://img.shields.io/github/workflow/status/tboox/tbox/Windows/dev.svg?style=flat-square&logo=windows" alt="github-ci" />
+      <img src="https://img.shields.io/github/actions/workflow/status/tboox/tbox/windows.yml?branch=dev&style=flat-square&logo=windows" alt="github-ci" />
     </a>
     <a href="https://github.com/tboox/tbox/actions?query=workflow%3ALinux">
-      <img src="https://img.shields.io/github/workflow/status/tboox/tbox/Linux/dev.svg?style=flat-square&logo=linux" alt="github-ci" />
+      <img src="https://img.shields.io/github/actions/workflow/status/tboox/tbox/linux.yml?branch=dev&style=flat-square&logo=linux" alt="github-ci" />
     </a>
     <a href="https://github.com/tboox/tbox/actions?query=workflow%3AmacOS">
-      <img src="https://img.shields.io/github/workflow/status/tboox/tbox/macOS/dev.svg?style=flat-square&logo=apple" alt="github-ci" />
+      <img src="https://img.shields.io/github/actions/workflow/status/tboox/tbox/macos.yml?branch=dev&style=flat-square&logo=apple" alt="github-ci" />
     </a>
     <a href="https://github.com/tboox/tbox/actions?query=workflow%3AAndroid">
-      <img src="https://img.shields.io/github/workflow/status/tboox/tbox/Android/dev.svg?style=flat-square&logo=android" alt="github-ci" />
+      <img src="https://img.shields.io/github/actions/workflow/status/tboox/tbox/android.yml?branch=dev&style=flat-square&logo=android" alt="github-ci" />
     </a>
     <a href="https://github.com/tboox/tbox/releases">
       <img src="https://img.shields.io/github/release/tboox/tbox.svg?style=flat-square" alt="Github All Releases" />
@@ -37,7 +37,7 @@
     <a href="https://jq.qq.com/?_wv=1027&k=5hpwWFv">
       <img src="https://img.shields.io/badge/chat-on%20QQ-ff69b4.svg?style=flat-square" alt="QQ" />
     </a>
-    <a href="https://tboox.org/donation/">
+    <a href="https://tboox.top/donation/">
       <img src="https://img.shields.io/badge/donate-us-orange.svg?style=flat-square" alt="Donate" />
     </a>
   </div>
@@ -47,7 +47,7 @@
 
 ## Supporting the project
 
-Support this project by becoming a sponsor. Your logo will show up here with a link to your website. 🙏 [[Become a sponsor](https://docs.tboox.org/#/about/sponsor)]
+Support this project by becoming a sponsor. Your logo will show up here with a link to your website. 🙏 [[Become a sponsor](https://docs.tboox.top/#/about/sponsor)]
 
 <a href="https://opencollective.com/tbox#backers" target="_blank"><img src="https://opencollective.com/tbox/backers.svg?width=890"></a>
 
@@ -67,7 +67,7 @@ And it provides many compiling options using [xmake](https://github.com/xmake-io
 * Small: Disable all extensional modules and enable space optimization.
 * Micro: compiling micro library (~64K) for the embed system.
 
-If you want to know more, please refer to: [Documents](https://docs.tboox.org/#/getting_started), [Github](https://github.com/tboox/tbox) and [Gitee](https://gitee.com/tboox/tbox)
+If you want to know more, please refer to: [Documents](https://docs.tboox.top/#/getting_started), [Github](https://github.com/tboox/tbox) and [Gitee](https://gitee.com/tboox/tbox)
 
 ## Features
 
@@ -197,7 +197,7 @@ Some projects using tbox:
 * [itrace](https://github.com/tboox/itrace)
 * [more](https://github.com/tboox/tbox/wiki/tbox-projects)
 
-## Build
+## Build (xmake)
 
 Please install xmake first: [xmake](https://github.com/xmake-io/xmake)
 
@@ -227,63 +227,31 @@ $ xmake f -p linux --sdk=/home/sdk # --bin=/home/sdk/bin
 $ xmake
 ```
 
+## Build (xmake.sh)
+
+```console
+$ ./configure
+$ make
+```
+
 ## Example
 
 ```c
 #include "tbox/tbox.h"
 
-int main(int argc, char** argv)
-{
-    // init tbox
+int main(int argc, char** argv) {
     if (!tb_init(tb_null, tb_null)) return 0;
 
-    // trace
-    tb_trace_i("hello tbox");
-
-    // init vector
     tb_vector_ref_t vector = tb_vector_init(0, tb_element_str(tb_true));
-    if (vector)
-    {
-        // insert item
+    if (vector) {
         tb_vector_insert_tail(vector, "hello");
         tb_vector_insert_tail(vector, "tbox");
 
-        // dump all items
-        tb_for_all (tb_char_t const*, cstr, vector)
-        {
-            // trace
+        tb_for_all (tb_char_t const*, cstr, vector) {
             tb_trace_i("%s", cstr);
         }
-
-        // exit vector
         tb_vector_exit(vector);
     }
-
-    // init stream
-    tb_stream_ref_t stream = tb_stream_init_from_url("http://www.xxx.com/file.txt");
-    if (stream)
-    {
-        // open stream
-        if (tb_stream_open(stream))
-        {
-            // read line
-            tb_long_t size = 0;
-            tb_char_t line[TB_STREAM_BLOCK_MAXN];
-            while ((size = tb_stream_bread_line(stream, line, sizeof(line))) >= 0)
-            {
-                // trace
-                tb_trace_i("line: %s", line);
-            }
-        }
-
-        // exit stream
-        tb_stream_exit(stream);
-    }
-
-    // wait
-    tb_getchar();
-
-    // exit tbox
     tb_exit();
     return 0;
 }
@@ -291,12 +259,12 @@ int main(int argc, char** argv)
 
 ## Technical Support
 
-You can also consider sponsoring us to get technical support services, [[Become a sponsor](https://docs.tboox.org/#/about/sponsor)]
+You can also consider sponsoring us to get technical support services, [[Become a sponsor](https://docs.tboox.top/#/about/sponsor)]
 
 ## Contacts
 
 * Email：[waruqi@gmail.com](mailto:waruqi@gmail.com)
-* Homepage：[tboox.org](https://tboox.org)
+* Homepage：[tboox.top](https://tboox.top)
 * Community：[/r/tboox on reddit](https://www.reddit.com/r/tboox/)
 * ChatRoom：[Chat on telegram](https://t.me/tbooxorg), [Chat on gitter](https://gitter.im/tboox/tboox?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 * QQ Group: 343118190(full), 662147501

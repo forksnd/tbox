@@ -62,6 +62,9 @@ static tb_long_t tb_directory_walk_copy(tb_char_t const* path, tb_file_info_t co
     tb_size_t size = tuple[1].ul;
     tb_char_t const* name = path + size;
 
+    // the copy flags
+    tb_size_t flags = tuple[2].ul;
+
     // the dest file path
     tb_char_t dpath[8192] = {0};
     tb_snprintf(dpath, 8192, "%s\\%s", dest, name[0] == '\\'? name + 1 : name);
@@ -77,18 +80,33 @@ static tb_long_t tb_directory_walk_copy(tb_char_t const* path, tb_file_info_t co
     }
 
     // copy
+    tb_bool_t ok = tb_true;
+    tb_bool_t skip_recursion = tb_false;
     switch (info->type)
     {
     case TB_FILE_TYPE_FILE:
-        if (!tb_file_copy(path, dpath)) tuple[2].b = tb_false;
+        ok = tb_file_copy(path, dpath, flags);
         break;
     case TB_FILE_TYPE_DIRECTORY:
-        if (!tb_directory_create(dpath)) tuple[2].b = tb_false;
+        {
+            // reserve symlink?
+            if ((flags & TB_FILE_COPY_LINK) && (info->flags & TB_FILE_FLAG_LINK))
+            {
+                // just copy link and skip recursion
+                ok = tb_file_copy(path, dpath, TB_FILE_COPY_LINK);
+                skip_recursion = tb_true;
+            }
+            else ok = tb_directory_create(dpath);
+        }
         break;
     default:
         break;
     }
-    return TB_DIRECTORY_WALK_CODE_CONTINUE;
+    tuple[3].b = ok;
+    tb_size_t retcode = TB_DIRECTORY_WALK_CODE_CONTINUE;
+    if (skip_recursion)
+        retcode |= TB_DIRECTORY_WALK_CODE_SKIP_RECURSION;
+    return retcode;
 }
 static tb_long_t tb_directory_walk_impl(tb_wchar_t const* path, tb_long_t recursion, tb_bool_t prefix, tb_directory_walk_func_t func, tb_cpointer_t priv)
 {
@@ -223,12 +241,22 @@ tb_size_t tb_directory_home(tb_char_t* path, tb_size_t maxn)
          *
          * CSIDL_APPDATA 0x1a
          * CSIDL_LOCAL_APPDATA 0x1c
+         * CSIDL_PROFILE 0x28
          */
-        if (S_OK != tb_shell32()->SHGetSpecialFolderLocation(tb_null, 0x1c /* CSIDL_LOCAL_APPDATA */, &pidl)) break;
+        tb_bool_t profile = tb_false;
+        if (S_OK != tb_shell32()->SHGetSpecialFolderLocation(tb_null, 0x1c /* CSIDL_LOCAL_APPDATA */, &pidl))
+        {
+            // https://github.com/xmake-io/xmake/issues/6208#issuecomment-2726307844
+            if (S_OK != tb_shell32()->SHGetSpecialFolderLocation(tb_null, 0x28 /* CSIDL_PROFILE */, &pidl))
+                break;
+            profile = tb_true;
+        }
         tb_check_break(pidl);
 
         // get the home directory
         if (!tb_shell32()->SHGetPathFromIDListW(pidl, home)) break;
+        if (profile)
+            tb_wcsncat(home, L"\\AppData\\Local", TB_PATH_MAXN);
 
         // ok
         ok = tb_true;
@@ -305,7 +333,7 @@ tb_void_t tb_directory_walk(tb_char_t const* path, tb_long_t recursion, tb_bool_
             tb_directory_walk_impl(full_w, recursion, prefix, func, priv);
     }
 }
-tb_bool_t tb_directory_copy(tb_char_t const* path, tb_char_t const* dest)
+tb_bool_t tb_directory_copy(tb_char_t const* path, tb_char_t const* dest, tb_size_t flags)
 {
     // the absolute path
     tb_char_t full0[TB_PATH_MAXN];
@@ -318,19 +346,16 @@ tb_bool_t tb_directory_copy(tb_char_t const* path, tb_char_t const* dest)
     tb_assert_and_check_return_val(dest, tb_false);
 
     // walk copy
-    tb_value_t tuple[3];
+    tb_value_t tuple[4];
     tuple[0].cstr = dest;
     tuple[1].ul = tb_strlen(path);
-    tuple[2].b = tb_true;
+    tuple[2].ul = flags;
+    tuple[3].b = tb_true;
     tb_directory_walk(path, -1, tb_true, tb_directory_walk_copy, tuple);
 
-    // ok?
-    tb_bool_t ok = tuple[2].b;
-
     // copy empty directory?
+    tb_bool_t ok = tuple[3].b;
     if (ok && !tb_file_info(dest, tb_null))
         return tb_directory_create(dest);
-
-    // ok?
     return ok;
 }
